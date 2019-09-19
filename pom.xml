@@ -58,29 +58,6 @@
           </execution>
         </executions>
       </plugin>
-<!--      <plugin>-->
-<!--        <groupId>org.apache.maven.plugins</groupId>-->
-<!--        <artifactId>maven-jar-plugin</artifactId>-->
-<!--        <configuration>-->
-<!--          <outputDirectory>${basedir}/lib</outputDirectory>-->
-<!--        </configuration>-->
-<!--        <executions>-->
-<!--          <execution>-->
-<!--            <id>package-proxy</id>-->
-<!--            <phase>package</phase>-->
-<!--            <goals>-->
-<!--              <goal>jar</goal>-->
-<!--            </goals>-->
-<!--            <configuration>-->
-<!--              <includes>-->
-<!--                <include>example/AppProxy.class</include>-->
-<!--              </includes>-->
-<!--              <finalName>nas-java-proxy-1.0</finalName>-->
-<!--              <outputDirectory>${basedir}/.fun/nas/auto-default/nas-example/lib</outputDirectory>-->
-<!--            </configuration>-->
-<!--          </execution>-->
-<!--        </executions>-->
-<!--      </plugin>-->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
