@@ -1,27 +1,28 @@
 package example;
 
-import com.aliyun.fc.runtime.Context;
-import com.aliyun.fc.runtime.FunctionInitializer;
-import com.aliyun.fc.runtime.StreamRequestHandler;
+import com.aliyun.fc.runtime.*;
 
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class Entrypoint implements StreamRequestHandler, FunctionInitializer {
+public class Entrypoint implements StreamRequestHandler, FunctionInitializer, HttpRequestHandler {
 
     private ClassLoader nasLibClassloader;
-    private Class<?> appClass;
-    private Object appObj;
+    private static final Map<String, Object> handlerObjectCache = new ConcurrentHashMap<>();
+
 
     {
 
@@ -41,57 +42,95 @@ public class Entrypoint implements StreamRequestHandler, FunctionInitializer {
 
         nasLibClassloader = new ChildFirstURLClassLoader(classpathExt.toArray(new URL[0]), Thread.currentThread().getContextClassLoader());
 
+    }
 
+    private Class<?> loadClass(String className, Class<?> superClass) {
         try {
-            appClass = Class.forName("example.App", true, nasLibClassloader);
+            Class customerClass = Class.forName(className, true, nasLibClassloader);
+            if (PojoRequestHandler.class.isAssignableFrom(customerClass)) {
+                throw new RuntimeException("interface com.aliyun.fc.runtime.PojoRequestHandler is not support, please use other com.aliyun.fc.runtime interfaces");
+            }
+            if (!superClass.isAssignableFrom(customerClass)) {
+                throw new RuntimeException(String.format("Handler class '%s' must implement one of the com.aliyun.fc.runtime interfaces", className));
+            }
+            return customerClass;
         } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        }
-
-
-        try {
-            appObj = appClass.getDeclaredConstructor().newInstance();
-        } catch (InstantiationException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
-        } catch (NoSuchMethodException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
-    public void initialize(Context context) throws IOException {
-        Thread.currentThread().setContextClassLoader(nasLibClassloader);
+    private Object newObject(Class<?> clasz) {
+        try {
+            return clasz.getDeclaredConstructor().newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private Object getHandlerObject(String className, Class<?> superClass) {
+        Object handler = handlerObjectCache.get(className);
+        if (handler == null) {
+            handler = newObject(loadClass(className, superClass));
+            handlerObjectCache.put(className, handler);
+        }
+        return handler;
+    }
+
+    private String[] splitHandlerName(String handlerName) {
+        String[] splittedNames = handlerName.split("::");
+
+        if (splittedNames.length != 2) {
+            throw new RuntimeException(String.format("Handler '%s' must contain one and only one \'::\'", handlerName));
+        }
+        return splittedNames;
+    }
+
+    private void invokeMethod(String envKey, Object... args) {
+
+        String handlerName = System.getenv(envKey);
+
+        if (handlerName == null) {
+            throw new RuntimeException(String.format("ENV: '%s' is not set", envKey));
+        }
+
+
+        String[] splittedNames = splitHandlerName(handlerName);
+        String className = splittedNames[0];
+        String methodName = splittedNames[1];
+
+        Class<?> customClass = loadClass(className, FunctionInitializer.class);
+        Class<?>[] parameterTypes = Stream.of(args).map(arg -> arg.getClass()).toArray(Class<?>[]::new);
 
         try {
-            Method initialize = appClass.getDeclaredMethod("initialize", Context.class);
-            initialize.invoke(appObj, context);
-        } catch (NoSuchMethodException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
+            Method initialize = customClass.getDeclaredMethod(methodName, parameterTypes);
+            initialize.invoke(getHandlerObject(className, FunctionInitializer.class), args);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
+    }
+
+
+    public void initialize(Context context) throws IOException {
+
+        Thread.currentThread().setContextClassLoader(nasLibClassloader);
+
+        invokeMethod("FUN_INITIALIZER", context);
     }
 
     @Override
     public void handleRequest(
             InputStream inputStream, OutputStream outputStream, Context context) throws IOException {
+
         Thread.currentThread().setContextClassLoader(nasLibClassloader);
 
-        try {
-            Method handleRequest = appClass.getDeclaredMethod("handleRequest", InputStream.class, OutputStream.class, Context.class);
-            handleRequest.invoke(appObj, inputStream, outputStream, context);
-        } catch (NoSuchMethodException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
-        }
+        invokeMethod("FUN_HANDLER", inputStream, outputStream, context);
+    }
+
+    @Override
+    public void handleRequest(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, Context context) throws IOException, ServletException {
+        Thread.currentThread().setContextClassLoader(nasLibClassloader);
+
+        invokeMethod("FUN_HANDLER", httpServletRequest, httpServletResponse, context);
     }
 }
 

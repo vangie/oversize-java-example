@@ -13,4 +13,7 @@ Resources:
         Initializer: example.Entrypoint::initialize
         Runtime: java8
         CodeUri: './lib/oversize-java-example-1.0-SNAPSHOT.jar'
+        EnvironmentVariables:
+          FUN_HANDLER: example.App::handleRequest
+          FUN_INITIALIZER: example.App::initialize
 
