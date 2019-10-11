@@ -31,11 +31,11 @@ Entrypoint.java 文件是入口文件，该文件会负责装载  App 类。开�
 ## 本地运行
 
 ```bash
-mvn package && fun local invoke
+fun build && fun local invoke
 ```
 
 ## 部署
 
 ```bash
-mvn package && fun deploy
+fun build && fun deploy
 ```

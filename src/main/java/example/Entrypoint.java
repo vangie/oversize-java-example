@@ -28,7 +28,7 @@ public class Entrypoint implements StreamRequestHandler, FunctionInitializer, Ht
 
         List<URL> classpathExt = Stream.of("/mnt/auto/lib", "/code")
                 .map(p -> new File(p))
-                .flatMap(f -> Stream.concat(Stream.of(f), Stream.of(f.listFiles((_dir, name) -> name.endsWith(".jar")))))
+                .flatMap(f -> Stream.concat(Stream.of(f), listJar(f)))
                 .map(f -> {
                     try {
                         return f.toURI().toURL();
@@ -36,12 +36,22 @@ public class Entrypoint implements StreamRequestHandler, FunctionInitializer, Ht
                         e.printStackTrace();
                     }
                     return null;
-
                 })
                 .collect(Collectors.toList());
 
         nasLibClassloader = new ChildFirstURLClassLoader(classpathExt.toArray(new URL[0]), Thread.currentThread().getContextClassLoader());
 
+    }
+
+    private Stream<File> listJar(File dir) {
+        File[] jarFiles = dir.listFiles((_dir, name) ->
+                name.endsWith(".jar") || name.endsWith(".JAR") || name.endsWith(".zip") || name.endsWith(".ZIP"));
+
+        if (jarFiles == null) {
+            return Stream.empty();
+        } else {
+            return Stream.of(jarFiles);
+        }
     }
 
     private Class<?> loadClass(String className, Class<?> superClass) {
@@ -85,7 +95,7 @@ public class Entrypoint implements StreamRequestHandler, FunctionInitializer, Ht
         return splittedNames;
     }
 
-    private void invokeMethod(String envKey, Object... args) {
+    private void invokeMethod(String envKey,Class<?> superClass, Class<?>[] parameterTypes, Object... args) {
 
         String handlerName = System.getenv(envKey);
 
@@ -99,14 +109,18 @@ public class Entrypoint implements StreamRequestHandler, FunctionInitializer, Ht
         String methodName = splittedNames[1];
 
         Class<?> customClass = loadClass(className, FunctionInitializer.class);
-        Class<?>[] parameterTypes = Stream.of(args).map(arg -> arg.getClass()).toArray(Class<?>[]::new);
 
         try {
             Method initialize = customClass.getDeclaredMethod(methodName, parameterTypes);
-            initialize.invoke(getHandlerObject(className, FunctionInitializer.class), args);
+            initialize.invoke(getHandlerObject(className, superClass), args);
         } catch (Exception e) {
+            e.printStackTrace();
             throw new RuntimeException(e);
         }
+    }
+
+    private Class<?>[] asClassList(Class<?>... classes) {
+        return classes;
     }
 
 
@@ -114,7 +128,8 @@ public class Entrypoint implements StreamRequestHandler, FunctionInitializer, Ht
 
         Thread.currentThread().setContextClassLoader(nasLibClassloader);
 
-        invokeMethod("FUN_INITIALIZER", context);
+
+        invokeMethod("FUN_INITIALIZER", FunctionInitializer.class, asClassList(Context.class), context);
     }
 
     @Override
@@ -123,14 +138,14 @@ public class Entrypoint implements StreamRequestHandler, FunctionInitializer, Ht
 
         Thread.currentThread().setContextClassLoader(nasLibClassloader);
 
-        invokeMethod("FUN_HANDLER", inputStream, outputStream, context);
+        invokeMethod("FUN_HANDLER", StreamRequestHandler.class, asClassList(InputStream.class, OutputStream.class, Context.class), inputStream, outputStream, context);
     }
 
     @Override
     public void handleRequest(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, Context context) throws IOException, ServletException {
         Thread.currentThread().setContextClassLoader(nasLibClassloader);
 
-        invokeMethod("FUN_HANDLER", httpServletRequest, httpServletResponse, context);
+        invokeMethod("FUN_HANDLER", HttpRequestHandler.class, asClassList(HttpServletRequest.class, HttpServletResponse.class, Context.class), httpServletRequest, httpServletResponse, context);
     }
 }
 
