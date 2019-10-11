@@ -39,3 +39,10 @@ fun build && fun local invoke
 ```bash
 fun build && fun deploy
 ```
+
+## 参考
+
+1. [开发函数计算的正确姿势 —— 使用 Fun NAS 管理 NAS 资源](https://yq.aliyun.com/articles/712700)
+2. [开发函数计算的正确姿势 —— Fun 自动化 NAS 配置](https://yq.aliyun.com/articles/712693)
+3. [Funcraft](https://github.com/alibaba/funcraft)
+4. [Aliyun Serverless VSCode Extension](https://github.com/alibaba/serverless-vscode)
